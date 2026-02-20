@@ -88,7 +88,7 @@ Examples:
 
 ## Quick usage examples
 
-Sample log request:
+Sample device log request:
 
 `gmc_log.php?AID=50389795&CPM=10&ACPM=7.9&uSV=0.20`
 

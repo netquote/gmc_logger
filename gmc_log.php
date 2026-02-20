@@ -17,6 +17,16 @@ declare(strict_types=1);
 // --- Configuration ---
 define('DB_FILE', 'gmc_logs/gmc_readings.sqlite');
 define('MAX_VIEW_ROWS', 100);
+define('THEMES', [
+    'light' => 'White',
+    'dark' => 'Dark',
+    'forest' => 'Forest',
+    'ocean' => 'Ocean',
+    'sunset' => 'Sunset',
+    'lavender' => 'Lavender',
+    'mono' => 'Monochrome',
+]);
+define('CHART_BUCKETS', ['minute', 'hourly', 'daily', 'weekly', 'monthly']);
 // --------------------
 
 function getDb(): PDO {
@@ -64,7 +74,13 @@ function getDb(): PDO {
 }
 
 function hasLogParams(): bool {
-    return isset($_GET['CPM']) || isset($_GET['ID']) || isset($_GET['AID']) || isset($_GET['GID']);
+    foreach (['CPM', 'ID', 'AID', 'GID'] as $key) {
+        if (isset($_GET[$key])) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function e(string $value): string {
@@ -73,21 +89,11 @@ function e(string $value): string {
 
 function getThemeFromRequest(): string {
     $theme = strtolower(trim((string)($_GET['theme'] ?? 'light')));
-    $allowed = ['light', 'dark', 'forest', 'ocean', 'sunset', 'lavender', 'mono'];
-
-    return in_array($theme, $allowed, true) ? $theme : 'light';
+    return array_key_exists($theme, THEMES) ? $theme : 'light';
 }
 
 function getThemeOptions(): array {
-    return [
-        'light' => 'White',
-        'dark' => 'Dark',
-        'forest' => 'Forest',
-        'ocean' => 'Ocean',
-        'sunset' => 'Sunset',
-        'lavender' => 'Lavender',
-        'mono' => 'Monochrome',
-    ];
+    return THEMES;
 }
 
 function readParam(array $keys, string $default): string {
@@ -196,16 +202,13 @@ function fetchChartSeries(array $filters, string $bucket): array {
     $params = [];
     $where = buildWhereClause($filters, $params);
 
-    $groupExpr = "strftime('%Y-%m-%d', timestamp)";
-    if ($bucket === 'minute') {
-        $groupExpr = "strftime('%Y-%m-%d %H:%M', timestamp)";
-    } elseif ($bucket === 'hourly') {
-        $groupExpr = "strftime('%Y-%m-%d %H:00', timestamp)";
-    } elseif ($bucket === 'weekly') {
-        $groupExpr = "strftime('%Y-W%W', timestamp)";
-    } elseif ($bucket === 'monthly') {
-        $groupExpr = "strftime('%Y-%m', timestamp)";
-    }
+    $groupExpr = [
+        'minute' => "strftime('%Y-%m-%d %H:%M', timestamp)",
+        'hourly' => "strftime('%Y-%m-%d %H:00', timestamp)",
+        'daily' => "strftime('%Y-%m-%d', timestamp)",
+        'weekly' => "strftime('%Y-W%W', timestamp)",
+        'monthly' => "strftime('%Y-%m', timestamp)",
+    ][$bucket] ?? "strftime('%Y-%m-%d', timestamp)";
 
     $sql = "SELECT
                 {$groupExpr} AS period_key,
@@ -241,6 +244,7 @@ function exportReadings(string $format, array $filters): void {
     $rows = fetchReadings($filters, null);
     $fileStamp = gmdate('Ymd_His');
     $headers = ['Timestamp', 'DeviceID', 'CPM', 'ACPM', 'uSv/h', 'Dose', 'RawData'];
+    $records = array_map('formatExportRow', $rows);
 
     if ($format === 'csv') {
         header('Content-Type: text/csv; charset=utf-8');
@@ -248,16 +252,8 @@ function exportReadings(string $format, array $filters): void {
 
         $out = fopen('php://output', 'w');
         fputcsv($out, $headers);
-        foreach ($rows as $row) {
-            fputcsv($out, [
-                $row['timestamp'],
-                $row['device_id'],
-                $row['cpm'],
-                $row['acpm'],
-                $row['usv'],
-                $row['dose'],
-                $row['raw_data'],
-            ]);
+        foreach ($records as $record) {
+            fputcsv($out, $record);
         }
         fclose($out);
         return;
@@ -268,25 +264,27 @@ function exportReadings(string $format, array $filters): void {
         header('Content-Disposition: attachment; filename="gmc_readings_' . $fileStamp . '.xlsx"');
 
         echo implode("\t", $headers) . "\n";
-        foreach ($rows as $row) {
-            $line = [
-                (string)$row['timestamp'],
-                (string)$row['device_id'],
-                (string)$row['cpm'],
-                (string)$row['acpm'],
-                (string)$row['usv'],
-                (string)$row['dose'],
-                (string)$row['raw_data'],
-            ];
-
+        foreach ($records as $record) {
             $line = array_map(static function (string $v): string {
                 $v = str_replace(["\t", "\r", "\n"], ' ', $v);
                 return trim($v);
-            }, $line);
+            }, $record);
 
             echo implode("\t", $line) . "\n";
         }
     }
+}
+
+function formatExportRow(array $row): array {
+    return [
+        (string)($row['timestamp'] ?? ''),
+        (string)($row['device_id'] ?? ''),
+        (string)($row['cpm'] ?? ''),
+        (string)($row['acpm'] ?? ''),
+        (string)($row['usv'] ?? ''),
+        (string)($row['dose'] ?? ''),
+        (string)($row['raw_data'] ?? ''),
+    ];
 }
 
 function handleLogRequest(): void {
@@ -326,13 +324,10 @@ function handleLogRequest(): void {
 function showViewer(array $filters, string $theme): void {
     $rows = fetchReadings($filters, MAX_VIEW_ROWS);
     $themeOptions = getThemeOptions();
-    $chartData = [
-        'minute' => fetchChartSeries($filters, 'minute'),
-        'hourly' => fetchChartSeries($filters, 'hourly'),
-        'daily' => fetchChartSeries($filters, 'daily'),
-        'weekly' => fetchChartSeries($filters, 'weekly'),
-        'monthly' => fetchChartSeries($filters, 'monthly'),
-    ];
+    $chartData = [];
+    foreach (CHART_BUCKETS as $bucket) {
+        $chartData[$bucket] = fetchChartSeries($filters, $bucket);
+    }
     ?>
     <!DOCTYPE html>
     <html lang="en" data-theme="<?= e($theme) ?>">
