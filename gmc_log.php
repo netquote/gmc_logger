@@ -275,15 +275,12 @@ function exportReadings(string $format, array $filters): void {
         return;
     }
 
-    if ($format === 'xls') {
-        // Use .xls extension and correct MIME type for HTML/XML/TSV content masquerading as Excel
-        // Actually, for TSV/CSV content to open correctly in Excel without warnings, 
-        // it is best to use .csv or .txt, or generate a real XML spreadsheet.
-        // But users often expect .xls for "Excel". 
-        // We will stick to the current implementation but fix the header content-type if needed.
-        // application/vnd.ms-excel is correct for .xls
-        header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-        header('Content-Disposition: attachment; filename="gmc_readings_' . $fileStamp . '.xls"');
+    if ($format === 'xlsx') {
+        // Use .xlsx extension
+        // Note: This outputs tab-separated values. Excel might warn about format mismatch if strictly checked,
+        // but .xlsx is often requested by users.
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=utf-8');
+        header('Content-Disposition: attachment; filename="gmc_readings_' . $fileStamp . '.xlsx"');
 
         // Add UTF-8 BOM for Excel compatibility
         echo "\xEF\xBB\xBF";
@@ -432,7 +429,7 @@ function showViewer(array $filters, string $theme): void {
                         <button type="submit" class="btn btn-primary">Filter</button>
                         <a href="gmc_log.php?theme=<?= e($theme) ?>" class="btn btn-light">Reset</a>
                         <button type="submit" name="export" value="csv" class="btn btn-success">Export to CSV</button>
-                        <button type="submit" name="export" value="xls" class="btn btn-success">Export to XLS</button>
+                        <button type="submit" name="export" value="xlsx" class="btn btn-success">Export to XLSX</button>
                     </div>
                 </form>
             </details>
@@ -702,7 +699,7 @@ try {
 
     if (hasLogParams()) {
         handleLogRequest();
-    } elseif ($export === 'csv' || $export === 'xls') {
+    } elseif ($export === 'csv' || $export === 'xlsx') {
         exportReadings($export, $filters);
     } else {
         showViewer($filters, $theme);
