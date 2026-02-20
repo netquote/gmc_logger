@@ -213,8 +213,11 @@ html[data-theme="mono"] {
 body {
     margin: 0;
     font-family: "Segoe UI", Arial, sans-serif;
+    background: #f3f6fb; /* Fallback */
     background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+    color: #1f2937; /* Fallback */
     color: var(--text);
+    transition: background 0.3s ease, color 0.3s ease;
 }
 
 .page {
@@ -254,6 +257,7 @@ body {
     background: var(--input-bg);
     color: var(--input-text);
     font-size: 0.9rem;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 .header p {
@@ -285,6 +289,7 @@ body {
     background: var(--input-bg);
     color: var(--text);
     font-size: 0.92rem;
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
 }
 
 .chart-title {
@@ -310,6 +315,7 @@ body {
     border-radius: 12px;
     box-shadow: var(--shadow);
     overflow: hidden;
+    transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .filters {
@@ -386,6 +392,15 @@ body {
     font-size: 0.92rem;
     text-decoration: none;
     cursor: pointer;
+    transition: filter 0.2s ease, transform 0.1s ease;
+}
+
+.btn:hover {
+    filter: brightness(0.9);
+}
+
+.btn:active {
+    transform: scale(0.98);
 }
 
 .btn-primary {

@@ -3,6 +3,20 @@
 `gmc_log.php` is a single-file GMC Geiger Counter logger and viewer.
 It accepts incoming device readings via HTTP GET, stores them in SQLite, and provides a browser UI with filtering, charting, and export.
 
+## Configure GMC Devices
+
+1. Connect your GMC-500+ to WiFi.
+2. Navigate to **Menu** -> **Server** -> **Website**.
+3. Enter the URL for your server installation.
+   
+   Example:
+   Website: `192.168.1.100`
+   URL: `gmc_log.php`
+   
+   *(Replace `192.168.1.100` with your actual server IP or domain)*
+
+4. Save and exit. The counter should begin sending readings.
+
 ## What `gmc_log.php` does
 
 - Logs incoming device readings to `gmc_logs/gmc_readings.sqlite`

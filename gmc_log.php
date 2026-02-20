@@ -202,12 +202,26 @@ function fetchChartSeries(array $filters, string $bucket): array {
     $params = [];
     $where = buildWhereClause($filters, $params);
 
+    // Limit "minute" bucket to last 24 hours if no specific timeframe is set
+    // to prevent fetching massive amounts of data by default.
+    if ($bucket === 'minute' && empty($filters['timestamp_from']) && empty($filters['timestamp_to'])) {
+        $yesterday = gmdate('Y-m-d H:i:s', time() - 86400);
+        // buildWhereClause constructs WHERE ... AND ...
+        // If it's empty, we start with WHERE. If not, we append AND.
+        if ($where === '') {
+            $where = ' WHERE timestamp >= :timestamp_limit';
+        } else {
+            $where .= ' AND timestamp >= :timestamp_limit';
+        }
+        $params[':timestamp_limit'] = $yesterday;
+    }
+
     $groupExpr = [
-        'minute' => "strftime('%Y-%m-%d %H:%M', timestamp)",
-        'hourly' => "strftime('%Y-%m-%d %H:00', timestamp)",
-        'daily' => "strftime('%Y-%m-%d', timestamp)",
-        'weekly' => "strftime('%Y-W%W', timestamp)",
-        'monthly' => "strftime('%Y-%m', timestamp)",
+        'minute' => "strftime('%Y-%m-%d %H:%M', timestamp)", // Group by minute
+        'hourly' => "strftime('%Y-%m-%d %H:00', timestamp)", // Group by hour
+        'daily' => "strftime('%Y-%m-%d', timestamp)",        // Group by day
+        'weekly' => "strftime('%Y-W%W', timestamp)",         // Weekly
+        'monthly' => "strftime('%Y-%m', timestamp)",         // Monthly
     ][$bucket] ?? "strftime('%Y-%m-%d', timestamp)";
 
     $sql = "SELECT
@@ -251,6 +265,8 @@ function exportReadings(string $format, array $filters): void {
         header('Content-Disposition: attachment; filename="gmc_readings_' . $fileStamp . '.csv"');
 
         $out = fopen('php://output', 'w');
+        // Add UTF-8 BOM for Excel compatibility
+        fputs($out, "\xEF\xBB\xBF");
         fputcsv($out, $headers);
         foreach ($records as $record) {
             fputcsv($out, $record);
@@ -259,10 +275,18 @@ function exportReadings(string $format, array $filters): void {
         return;
     }
 
-    if ($format === 'xlsx') {
+    if ($format === 'xls') {
+        // Use .xls extension and correct MIME type for HTML/XML/TSV content masquerading as Excel
+        // Actually, for TSV/CSV content to open correctly in Excel without warnings, 
+        // it is best to use .csv or .txt, or generate a real XML spreadsheet.
+        // But users often expect .xls for "Excel". 
+        // We will stick to the current implementation but fix the header content-type if needed.
+        // application/vnd.ms-excel is correct for .xls
         header('Content-Type: application/vnd.ms-excel; charset=utf-8');
-        header('Content-Disposition: attachment; filename="gmc_readings_' . $fileStamp . '.xlsx"');
+        header('Content-Disposition: attachment; filename="gmc_readings_' . $fileStamp . '.xls"');
 
+        // Add UTF-8 BOM for Excel compatibility
+        echo "\xEF\xBB\xBF";
         echo implode("\t", $headers) . "\n";
         foreach ($records as $record) {
             $line = array_map(static function (string $v): string {
@@ -324,9 +348,31 @@ function handleLogRequest(): void {
 function showViewer(array $filters, string $theme): void {
     $rows = fetchReadings($filters, MAX_VIEW_ROWS);
     $themeOptions = getThemeOptions();
+    
+    // Only fetch the default or requested chart data to improve performance
+    // The current UI switches purely on client side which requires all data. 
+    // To fix performance properly, we would need to fetch data via AJAX.
+    // However, as a quick fix/correction, we keep it but optimize the default view if possible.
+    // Or we leave it as valid PHP but maybe warn about performance.
+    // Given the request "check and correct", I will ensure it works efficiently.
+    // Let's optimize: The minute bucket is likely too large.
+    // We'll limit the "minute" bucket to the last 24 hours if no filter is set.
+    
     $chartData = [];
     foreach (CHART_BUCKETS as $bucket) {
+        // Optimization: Skip 'minute' bucket if looking at a long range or no range (default view) to save bandwidth
+        // unless requested specifically or if the filter range is small.
+        // For now, we will just fetch all as the user might want to switch instantly.
         $chartData[$bucket] = fetchChartSeries($filters, $bucket);
+    }
+    
+    // Detect if we have data
+    $hasData = false;
+    foreach($chartData as $data) {
+        if (!empty($data['labels'])) {
+            $hasData = true;
+            break;
+        }
     }
     ?>
     <!DOCTYPE html>
@@ -386,7 +432,7 @@ function showViewer(array $filters, string $theme): void {
                         <button type="submit" class="btn btn-primary">Filter</button>
                         <a href="gmc_log.php?theme=<?= e($theme) ?>" class="btn btn-light">Reset</a>
                         <button type="submit" name="export" value="csv" class="btn btn-success">Export to CSV</button>
-                        <button type="submit" name="export" value="xlsx" class="btn btn-success">Export to XLSX</button>
+                        <button type="submit" name="export" value="xls" class="btn btn-success">Export to XLS</button>
                     </div>
                 </form>
             </details>
@@ -654,13 +700,9 @@ try {
     $theme = getThemeFromRequest();
     $export = strtolower(trim((string)($_GET['export'] ?? '')));
 
-    if ($export === 'xls') {
-        $export = 'xlsx';
-    }
-
     if (hasLogParams()) {
         handleLogRequest();
-    } elseif ($export === 'csv' || $export === 'xlsx') {
+    } elseif ($export === 'csv' || $export === 'xls') {
         exportReadings($export, $filters);
     } else {
         showViewer($filters, $theme);
