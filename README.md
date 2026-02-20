@@ -40,7 +40,7 @@ The script auto-creates the DB folder and table if missing.
 
 ## Logging endpoint behavior
 
-The script treats a request as a **log write** when any of these query params exists:
+The script treats a request as a **log write** when any of these query params exists (case-insensitive):
 
 - `CPM`, `ID`, `AID`, or `GID`
 
@@ -63,6 +63,23 @@ Defaults when omitted:
 On successful insert, response body is:
 
 - `OK`
+
+Optional device whitelist:
+
+- If `whitelist.txt` exists in the same folder as `gmc_log.php`, only listed device IDs are accepted.
+- One device ID per line.
+- Empty lines are ignored.
+- Lines starting with `#` are treated as comments.
+- Device matching is case-insensitive.
+- If a device is not in whitelist, the logger returns HTTP `403` with body `FORBIDDEN`.
+
+Example `whitelist.txt`:
+
+```txt
+# Allowed devices
+50389795
+GMC-ALPHA-01
+```
 
 On unhandled server error:
 
@@ -117,3 +134,12 @@ to view data.
 - PHP with PDO SQLite enabled
 - Web server that can run PHP (Apache/Nginx+PHP-FPM/IIS+PHP)
 - Write permission for `gmc_logs/`
+
+## FTP deploy script
+
+Use `ftp_update.bat` to upload selected files.
+
+- Configure FTP credentials in `ftp_update.bat` (`FTP_HOST`, `FTP_USER`, `FTP_PASS`, `FTP_REMOTE_DIR`).
+- Configure uploaded files in `FTP_FILES` (space-separated list).
+- The batch script calls `ftp_update.py --files ...`.
+- If a listed file does not exist, upload stops with error.

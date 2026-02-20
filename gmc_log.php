@@ -16,6 +16,7 @@ declare(strict_types=1);
 
 // --- Configuration ---
 define('DB_FILE', 'gmc_logs/gmc_readings.sqlite');
+define('WHITELIST_FILE', __DIR__ . '/whitelist.txt');
 define('MAX_VIEW_ROWS', 100);
 define('THEMES', [
     'light' => 'White',
@@ -74,7 +75,7 @@ function getDb(): PDO {
 }
 
 function hasLogParams(): bool {
-    foreach (['CPM', 'ID', 'AID', 'GID'] as $key) {
+    foreach (['CPM', 'cpm', 'ID', 'id', 'AID', 'aid', 'GID', 'gid'] as $key) {
         if (isset($_GET[$key])) {
             return true;
         }
@@ -134,6 +135,42 @@ function getClientIpFromRequest(): string {
     }
 
     return 'UNKNOWN';
+}
+
+function getWhitelistDevices(): ?array {
+    if (!is_file(WHITELIST_FILE)) {
+        return null;
+    }
+
+    if (!is_readable(WHITELIST_FILE)) {
+        throw new RuntimeException('Whitelist file is not readable: ' . WHITELIST_FILE);
+    }
+
+    $lines = file(WHITELIST_FILE, FILE_IGNORE_NEW_LINES);
+    if ($lines === false) {
+        throw new RuntimeException('Unable to read whitelist file: ' . WHITELIST_FILE);
+    }
+
+    $allowed = [];
+    foreach ($lines as $line) {
+        $value = trim((string)$line);
+        if ($value === '' || str_starts_with($value, '#')) {
+            continue;
+        }
+
+        $allowed[strtoupper($value)] = true;
+    }
+
+    return $allowed;
+}
+
+function isDeviceAllowed(string $deviceId): bool {
+    $allowed = getWhitelistDevices();
+    if ($allowed === null) {
+        return true;
+    }
+
+    return isset($allowed[strtoupper(trim($deviceId))]);
 }
 
 function getFiltersFromRequest(): array {
@@ -319,6 +356,12 @@ function handleLogRequest(): void {
     $dose     = readParam(['dose', 'DOSE'], '0');
     $clientIp = getClientIpFromRequest();
 
+    if (!isDeviceAllowed($deviceId)) {
+        http_response_code(403);
+        echo 'FORBIDDEN';
+        return;
+    }
+
     // Capture all parameters for raw logging
     $rawData = json_encode($_GET, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
 
@@ -345,24 +388,12 @@ function handleLogRequest(): void {
 function showViewer(array $filters, string $theme): void {
     $rows = fetchReadings($filters, MAX_VIEW_ROWS);
     $themeOptions = getThemeOptions();
-    
-    // Only fetch the default or requested chart data to improve performance
-    // The current UI switches purely on client side which requires all data. 
-    // To fix performance properly, we would need to fetch data via AJAX.
-    // However, as a quick fix/correction, we keep it but optimize the default view if possible.
-    // Or we leave it as valid PHP but maybe warn about performance.
-    // Given the request "check and correct", I will ensure it works efficiently.
-    // Let's optimize: The minute bucket is likely too large.
-    // We'll limit the "minute" bucket to the last 24 hours if no filter is set.
-    
+
     $chartData = [];
     foreach (CHART_BUCKETS as $bucket) {
-        // Optimization: Skip 'minute' bucket if looking at a long range or no range (default view) to save bandwidth
-        // unless requested specifically or if the filter range is small.
-        // For now, we will just fetch all as the user might want to switch instantly.
         $chartData[$bucket] = fetchChartSeries($filters, $bucket);
     }
-    
+
     // Detect if we have data
     $hasData = false;
     foreach($chartData as $data) {
