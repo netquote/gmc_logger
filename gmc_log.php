@@ -27,7 +27,6 @@ define('THEMES', [
     'lavender' => 'Lavender',
     'mono' => 'Monochrome',
 ]);
-define('CHART_BUCKETS', ['minute', 'hourly', 'daily', 'weekly', 'monthly']);
 // --------------------
 
 function getDb(): PDO {
@@ -234,63 +233,6 @@ function fetchReadings(array $filters, ?int $limit = MAX_VIEW_ROWS): array {
     return $stmt->fetchAll();
 }
 
-function fetchChartSeries(array $filters, string $bucket): array {
-    $db = getDb();
-    $params = [];
-    $where = buildWhereClause($filters, $params);
-
-    // Limit "minute" bucket to last 24 hours if no specific timeframe is set
-    // to prevent fetching massive amounts of data by default.
-    if ($bucket === 'minute' && empty($filters['timestamp_from']) && empty($filters['timestamp_to'])) {
-        $yesterday = gmdate('Y-m-d H:i:s', time() - 86400);
-        // buildWhereClause constructs WHERE ... AND ...
-        // If it's empty, we start with WHERE. If not, we append AND.
-        if ($where === '') {
-            $where = ' WHERE timestamp >= :timestamp_limit';
-        } else {
-            $where .= ' AND timestamp >= :timestamp_limit';
-        }
-        $params[':timestamp_limit'] = $yesterday;
-    }
-
-    $groupExpr = [
-        'minute' => "strftime('%Y-%m-%d %H:%M', timestamp)", // Group by minute
-        'hourly' => "strftime('%Y-%m-%d %H:00', timestamp)", // Group by hour
-        'daily' => "strftime('%Y-%m-%d', timestamp)",        // Group by day
-        'weekly' => "strftime('%Y-W%W', timestamp)",         // Weekly
-        'monthly' => "strftime('%Y-%m', timestamp)",         // Monthly
-    ][$bucket] ?? "strftime('%Y-%m-%d', timestamp)";
-
-    $sql = "SELECT
-                {$groupExpr} AS period_key,
-                AVG(CAST(cpm AS REAL)) AS avg_cpm,
-                AVG(CAST(acpm AS REAL)) AS avg_acpm,
-                MIN(timestamp) AS first_ts
-            FROM readings";
-    $sql .= $where;
-    $sql .= ' GROUP BY period_key ORDER BY first_ts ASC';
-
-    $stmt = $db->prepare($sql);
-    $stmt->execute($params);
-    $rows = $stmt->fetchAll();
-
-    $labels = [];
-    $cpm = [];
-    $acpm = [];
-
-    foreach ($rows as $row) {
-        $labels[] = (string)($row['period_key'] ?? '');
-        $cpm[] = round((float)($row['avg_cpm'] ?? 0), 2);
-        $acpm[] = round((float)($row['avg_acpm'] ?? 0), 2);
-    }
-
-    return [
-        'labels' => $labels,
-        'cpm' => $cpm,
-        'acpm' => $acpm,
-    ];
-}
-
 function exportReadings(string $format, array $filters): void {
     $rows = fetchReadings($filters, null);
     $fileStamp = gmdate('Ymd_His');
@@ -388,20 +330,6 @@ function handleLogRequest(): void {
 function showViewer(array $filters, string $theme): void {
     $rows = fetchReadings($filters, MAX_VIEW_ROWS);
     $themeOptions = getThemeOptions();
-
-    $chartData = [];
-    foreach (CHART_BUCKETS as $bucket) {
-        $chartData[$bucket] = fetchChartSeries($filters, $bucket);
-    }
-
-    // Detect if we have data
-    $hasData = false;
-    foreach($chartData as $data) {
-        if (!empty($data['labels'])) {
-            $hasData = true;
-            break;
-        }
-    }
     ?>
     <!DOCTYPE html>
     <html lang="en" data-theme="<?= e($theme) ?>">
@@ -415,7 +343,7 @@ function showViewer(array $filters, string $theme): void {
         <main class="page">
             <header class="header">
                 <div class="header-top">
-                    <h1>📊 GMC-500+ Geiger Counter Data Logger</h1>
+                    <h1>☢️ GMC-500+ Geiger Counter Data Logger</h1>
                     <div class="theme-control">
                         <label for="theme-select">Theme</label>
                         <select id="theme-select" aria-label="Theme">
@@ -427,22 +355,6 @@ function showViewer(array $filters, string $theme): void {
                 </div>
                 <p>Filter, browse and export counter data</p>
             </header>
-
-            <section class="card chart-card">
-                <div class="chart-toolbar">
-                    <label for="chart-range">Chart</label>
-                    <select id="chart-range">
-                        <option value="minute">Minute</option>
-                        <option value="hourly">Hourly</option>
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                    </select>
-                </div>
-                <h2 class="chart-title" id="chart-title" data-base-title="CPM and ACPM trend" data-from-label="From" data-to-label="To">CPM and ACPM trend (Hourly)</h2>
-                <canvas id="cpmChart" height="280" aria-label="CPM ACPM chart"></canvas>
-                <p id="chart-empty" class="chart-empty" hidden>No chart data available for selected period</p>
-            </section>
 
             <details class="filters card">
                 <summary>Select period</summary>
@@ -505,21 +417,10 @@ function showViewer(array $filters, string $theme): void {
             </footer>
         </main>
         <script>
-            const chartSeries = <?= json_encode($chartData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-            const selectRange = document.getElementById('chart-range');
-            const chartTitle = document.getElementById('chart-title');
             const themeSelect = document.getElementById('theme-select');
             const themeHidden = document.getElementById('theme-hidden');
-            const canvas = document.getElementById('cpmChart');
-            const emptyNote = document.getElementById('chart-empty');
-            const context = canvas.getContext('2d');
             const htmlNode = document.documentElement;
             const allowedThemes = ['light', 'dark', 'forest', 'ocean', 'sunset', 'lavender', 'mono'];
-
-            function cssColor(varName, fallback) {
-                const value = getComputedStyle(htmlNode).getPropertyValue(varName).trim();
-                return value || fallback;
-            }
 
             function applyTheme(theme) {
                 const safeTheme = allowedThemes.includes(theme) ? theme : 'light';
@@ -535,149 +436,6 @@ function showViewer(array $filters, string $theme): void {
                 if (themeHidden) {
                     themeHidden.value = safeTheme;
                 }
-                drawLineChart(selectRange.value);
-            }
-
-            function updateChartTitle() {
-                if (!chartTitle || !selectRange) {
-                    return;
-                }
-
-                const baseTitle = chartTitle.dataset.baseTitle || chartTitle.textContent || '';
-                const fromLabel = chartTitle.dataset.fromLabel || 'From';
-                const toLabel = chartTitle.dataset.toLabel || 'To';
-                const selectedLabel = selectRange.options[selectRange.selectedIndex]
-                    ? selectRange.options[selectRange.selectedIndex].text
-                    : '';
-                const selectedBucket = selectRange.value;
-                const currentSeries = chartSeries[selectedBucket] || { labels: [] };
-                const labels = currentSeries.labels || [];
-
-                let periodText = '';
-                if (labels.length > 0) {
-                    const firstLabel = labels[0];
-                    const lastLabel = labels[labels.length - 1];
-                    periodText = `${fromLabel}: ${firstLabel} ${toLabel}: ${lastLabel}`;
-                }
-
-                const mainTitle = selectedLabel ? `${baseTitle} (${selectedLabel})` : `${baseTitle}`;
-                chartTitle.textContent = mainTitle;
-
-                if (periodText !== '') {
-                    chartTitle.appendChild(document.createElement('br'));
-                    chartTitle.appendChild(document.createTextNode(periodText));
-                }
-            }
-
-            function drawLineChart(bucket) {
-                const data = chartSeries[bucket] || { labels: [], cpm: [], acpm: [] };
-                const labels = data.labels || [];
-                const cpmValues = data.cpm || [];
-                const acpmValues = data.acpm || [];
-
-                const width = canvas.clientWidth || canvas.parentElement.clientWidth;
-                const height = 280;
-                const dpr = window.devicePixelRatio || 1;
-
-                canvas.width = Math.max(1, Math.floor(width * dpr));
-                canvas.height = Math.max(1, Math.floor(height * dpr));
-                context.setTransform(dpr, 0, 0, dpr, 0, 0);
-                context.clearRect(0, 0, width, height);
-
-                if (labels.length === 0) {
-                    canvas.hidden = true;
-                    emptyNote.hidden = false;
-                    return;
-                }
-
-                canvas.hidden = false;
-                emptyNote.hidden = true;
-
-                const pad = { left: 48, right: 16, top: 18, bottom: 52 };
-                const plotWidth = width - pad.left - pad.right;
-                const plotHeight = height - pad.top - pad.bottom;
-
-                const allValues = cpmValues.concat(acpmValues);
-                const maxVal = Math.max(...allValues, 1);
-                const yTicks = 5;
-
-                const chartGrid = cssColor('--chart-grid', '#d1d5db');
-                const chartText = cssColor('--chart-text', '#6b7280');
-                const cpmColor = cssColor('--chart-cpm', '#0f766e');
-                const acpmColor = cssColor('--chart-acpm', '#1d4ed8');
-                const legendText = cssColor('--chart-legend-text', '#1f2937');
-
-                context.strokeStyle = chartGrid;
-                context.fillStyle = chartText;
-                context.lineWidth = 1;
-                context.font = '12px Segoe UI, Arial, sans-serif';
-
-                for (let i = 0; i <= yTicks; i++) {
-                    const y = pad.top + (plotHeight * i) / yTicks;
-                    const value = maxVal - (maxVal * i) / yTicks;
-
-                    context.beginPath();
-                    context.moveTo(pad.left, y);
-                    context.lineTo(width - pad.right, y);
-                    context.stroke();
-
-                    context.fillText(value.toFixed(0), 8, y + 4);
-                }
-
-                function xForIndex(index) {
-                    if (labels.length === 1) return pad.left + plotWidth / 2;
-                    return pad.left + (plotWidth * index) / (labels.length - 1);
-                }
-
-                function yForValue(value) {
-                    return pad.top + ((maxVal - value) / (maxVal || 1)) * plotHeight;
-                }
-
-                function drawSeries(values, color) {
-                    context.strokeStyle = color;
-                    context.lineWidth = 2;
-                    context.beginPath();
-
-                    values.forEach((value, index) => {
-                        const x = xForIndex(index);
-                        const y = yForValue(value);
-                        if (index === 0) context.moveTo(x, y);
-                        else context.lineTo(x, y);
-                    });
-
-                    context.stroke();
-
-                    context.fillStyle = color;
-                    values.forEach((value, index) => {
-                        const x = xForIndex(index);
-                        const y = yForValue(value);
-                        context.beginPath();
-                        context.arc(x, y, 3, 0, Math.PI * 2);
-                        context.fill();
-                    });
-                }
-
-                drawSeries(cpmValues, cpmColor);
-                drawSeries(acpmValues, acpmColor);
-
-                context.fillStyle = chartText;
-                context.textAlign = 'center';
-                const maxLabels = Math.min(labels.length, 8);
-                const step = Math.max(1, Math.ceil(labels.length / maxLabels));
-                for (let i = 0; i < labels.length; i += step) {
-                    context.fillText(labels[i], xForIndex(i), height - 20);
-                }
-
-                context.textAlign = 'left';
-                context.fillStyle = cpmColor;
-                context.fillRect(pad.left, 7, 14, 3);
-                context.fillStyle = legendText;
-                context.fillText('CPM', pad.left + 20, 13);
-
-                context.fillStyle = acpmColor;
-                context.fillRect(pad.left + 72, 7, 14, 3);
-                context.fillStyle = legendText;
-                context.fillText('ACPM', pad.left + 92, 13);
             }
 
             themeSelect.addEventListener('change', function () {
@@ -686,15 +444,6 @@ function showViewer(array $filters, string $theme): void {
                 const url = new URL(window.location.href);
                 url.searchParams.set('theme', themeSelect.value);
                 window.history.replaceState({}, '', url.toString());
-            });
-
-            selectRange.addEventListener('change', function () {
-                updateChartTitle();
-                drawLineChart(selectRange.value);
-            });
-
-            window.addEventListener('resize', function () {
-                drawLineChart(selectRange.value);
             });
 
             let storedTheme = '';
@@ -708,9 +457,6 @@ function showViewer(array $filters, string $theme): void {
             } else {
                 applyTheme(themeSelect.value);
             }
-
-            updateChartTitle();
-            drawLineChart(selectRange.value);
 
             const autoRefreshMs = 60 * 1000;
             setInterval(function () {

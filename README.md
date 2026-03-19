@@ -1,7 +1,7 @@
 # gmc_logger
 
 `gmc_log.php` is a single-file GMC Geiger Counter logger and viewer.
-It accepts incoming device readings via HTTP GET, stores them in SQLite, and provides a browser UI with filtering, charting, and export.
+It accepts incoming device readings via HTTP GET, stores them in SQLite, and provides a browser UI with filtering and export.
 
 ## Configure GMC Devices
 
@@ -93,7 +93,6 @@ Opening `gmc_log.php` without log params shows the dashboard.
 Features:
 
 - Last 100 rows shown (`MAX_VIEW_ROWS = 100`)
-- Built-in chart buckets: minute, hourly, daily, weekly, monthly
 - Date filters via:
 	- `f_timestamp_from=YYYY-MM-DD`
 	- `f_timestamp_to=YYYY-MM-DD`

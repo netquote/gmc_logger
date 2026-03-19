@@ -23,11 +23,6 @@
     --btn-light-bg: #f8fafc;
     --btn-light-border: #d1d5db;
     --btn-light-text: #111827;
-    --chart-grid: #d1d5db;
-    --chart-text: #6b7280;
-    --chart-cpm: #0f766e;
-    --chart-acpm: #1d4ed8;
-    --chart-legend-text: #1f2937;
 }
 
 html[data-theme="dark"] {
@@ -49,11 +44,6 @@ html[data-theme="dark"] {
     --btn-light-bg: #374151;
     --btn-light-border: #4b5563;
     --btn-light-text: #f9fafb;
-    --chart-grid: #374151;
-    --chart-text: #9ca3af;
-    --chart-cpm: #2dd4bf;
-    --chart-acpm: #60a5fa;
-    --chart-legend-text: #f3f4f6;
 }
 
 html[data-theme="forest"] {
@@ -79,11 +69,6 @@ html[data-theme="forest"] {
     --btn-light-bg: #edf7f0;
     --btn-light-border: #b7d3c1;
     --btn-light-text: #183126;
-    --chart-grid: #c8dfcf;
-    --chart-text: #4a6a5a;
-    --chart-cpm: #2f855a;
-    --chart-acpm: #2b6cb0;
-    --chart-legend-text: #183126;
 }
 
 html[data-theme="ocean"] {
@@ -109,11 +94,6 @@ html[data-theme="ocean"] {
     --btn-light-bg: #eef8fc;
     --btn-light-border: #b6d4e6;
     --btn-light-text: #12314a;
-    --chart-grid: #c4dff0;
-    --chart-text: #4b6b82;
-    --chart-cpm: #0e7490;
-    --chart-acpm: #2563eb;
-    --chart-legend-text: #12314a;
 }
 
 html[data-theme="sunset"] {
@@ -139,11 +119,6 @@ html[data-theme="sunset"] {
     --btn-light-bg: #fff5ee;
     --btn-light-border: #ebc2af;
     --btn-light-text: #4a2a20;
-    --chart-grid: #f2d3c4;
-    --chart-text: #8a5a4a;
-    --chart-cpm: #c2410c;
-    --chart-acpm: #7c3aed;
-    --chart-legend-text: #4a2a20;
 }
 
 html[data-theme="lavender"] {
@@ -169,11 +144,6 @@ html[data-theme="lavender"] {
     --btn-light-bg: #f7f2ff;
     --btn-light-border: #d0c0ee;
     --btn-light-text: #31204a;
-    --chart-grid: #ddd0f5;
-    --chart-text: #6a5a8f;
-    --chart-cpm: #6d28d9;
-    --chart-acpm: #0ea5e9;
-    --chart-legend-text: #31204a;
 }
 
 html[data-theme="mono"] {
@@ -199,11 +169,6 @@ html[data-theme="mono"] {
     --btn-light-bg: #f4f4f5;
     --btn-light-border: #c4c4c8;
     --btn-light-text: #18181b;
-    --chart-grid: #d4d4d8;
-    --chart-text: #52525b;
-    --chart-cpm: #3f3f46;
-    --chart-acpm: #71717a;
-    --chart-legend-text: #18181b;
 }
 
 * {
@@ -263,50 +228,6 @@ body {
 .header p {
     margin: 8px 0 20px;
     color: var(--muted);
-}
-
-.chart-card {
-    margin-bottom: 14px;
-    padding: 14px;
-}
-
-.chart-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-}
-
-.chart-toolbar label {
-    font-size: 0.92rem;
-    color: var(--muted);
-}
-
-.chart-toolbar select {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 8px 10px;
-    background: var(--input-bg);
-    color: var(--text);
-    font-size: 0.92rem;
-    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-}
-
-.chart-title {
-    margin: 0 0 10px;
-    font-size: 1rem;
-    font-weight: 600;
-}
-
-#cpmChart {
-    width: 100%;
-    display: block;
-}
-
-.chart-empty {
-    margin: 12px 0 2px;
-    color: var(--muted);
-    font-size: 0.92rem;
 }
 
 .card {
@@ -485,11 +406,6 @@ tbody tr:nth-child(even) {
     }
 
     .actions {
-        flex-direction: column;
-    }
-
-    .chart-toolbar {
-        align-items: flex-start;
         flex-direction: column;
     }
 }
