@@ -15,63 +15,11 @@
 declare(strict_types=1);
 
 // --- Configuration ---
-define('DB_FILE', 'gmc_logs/gmc_readings.sqlite');
+require_once __DIR__ . '/gmc_common.php';
+
 define('WHITELIST_FILE', __DIR__ . '/whitelist.txt');
 define('MAX_VIEW_ROWS', 50);
-define('THEMES', [
-    'light' => 'White',
-    'dark' => 'Dark',
-    'forest' => 'Forest',
-    'ocean' => 'Ocean',
-    'sunset' => 'Sunset',
-    'lavender' => 'Lavender',
-    'mono' => 'Monochrome',
-]);
 // --------------------
-
-function getDb(): PDO {
-    static $pdo = null;
-
-    if ($pdo === null) {
-        $dbDir = dirname(DB_FILE);
-        if (!is_dir($dbDir)) {
-            mkdir($dbDir, 0777, true);
-        }
-
-        $pdo = new PDO('sqlite:' . DB_FILE);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-
-        $pdo->exec(
-            'CREATE TABLE IF NOT EXISTS readings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                device_id TEXT NOT NULL,
-                cpm TEXT NOT NULL,
-                acpm TEXT NOT NULL,
-                usv TEXT NOT NULL,
-                dose TEXT NOT NULL,
-                raw_data TEXT NOT NULL,
-                client_ip TEXT NOT NULL DEFAULT ""
-            )'
-        );
-
-        $columns = $pdo->query('PRAGMA table_info(readings)')->fetchAll();
-        $hasClientIp = false;
-        foreach ($columns as $column) {
-            if (($column['name'] ?? '') === 'client_ip') {
-                $hasClientIp = true;
-                break;
-            }
-        }
-
-        if (!$hasClientIp) {
-            $pdo->exec('ALTER TABLE readings ADD COLUMN client_ip TEXT NOT NULL DEFAULT ""');
-        }
-    }
-
-    return $pdo;
-}
 
 function hasLogParams(): bool {
     foreach (['CPM', 'cpm', 'ID', 'id', 'AID', 'aid', 'GID', 'gid'] as $key) {
@@ -81,19 +29,6 @@ function hasLogParams(): bool {
     }
 
     return false;
-}
-
-function e(string $value): string {
-    return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-}
-
-function getThemeFromRequest(): string {
-    $theme = strtolower(trim((string)($_GET['theme'] ?? 'dark')));
-    return array_key_exists($theme, THEMES) ? $theme : 'dark';
-}
-
-function getThemeOptions(): array {
-    return THEMES;
 }
 
 function readParam(array $keys, string $default): string {
@@ -175,70 +110,11 @@ function isDeviceAllowed(string $deviceId): bool {
 
 
 function fetchChartData(string $range): array {
-    $db = getDb();
-
-    switch ($range) {
-        case 'day':
-            $since = gmdate('Y-m-d H:i:s', time() - 86400);
-            $groupExpr = "strftime('%Y-%m-%d %H:', timestamp) || (CAST(strftime('%M', timestamp) AS INTEGER) / 10 * 10)";
-            $labelExpr = "strftime('%H:', timestamp) || SUBSTR('0' || (CAST(strftime('%M', timestamp) AS INTEGER) / 10 * 10), -2)";
-            break;
-        case 'week':
-            $since = gmdate('Y-m-d H:i:s', time() - 7 * 86400);
-            $groupExpr = "strftime('%Y-%m-%d', timestamp) || ' ' || CASE WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 6 THEN '00' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 12 THEN '06' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 18 THEN '12' ELSE '18' END";
-            $labelExpr = "strftime('%m-%d', timestamp) || ' ' || CASE WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 6 THEN '00h' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 12 THEN '06h' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 18 THEN '12h' ELSE '18h' END";
-            break;
-        case 'month':
-            $since = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
-            $groupExpr = "strftime('%Y-%m-%d', timestamp) || ' ' || CASE WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 6 THEN '00' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 12 THEN '06' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 18 THEN '12' ELSE '18' END";
-            $labelExpr = "strftime('%m-%d', timestamp) || ' ' || CASE WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 6 THEN '00h' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 12 THEN '06h' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 18 THEN '12h' ELSE '18h' END";
-            break;
-        case 'year':
-            $since = gmdate('Y-m-d H:i:s', time() - 365 * 86400);
-            $groupExpr = "strftime('%Y-W', timestamp) || SUBSTR('0' || ((CAST(strftime('%j', timestamp) AS INTEGER) - 1) / 7 + 1), -2)";
-            $labelExpr = "strftime('%m-', timestamp) || 'W' || SUBSTR('0' || ((CAST(strftime('%j', timestamp) AS INTEGER) - 1) / 7 + 1), -2)";
-            break;
-        default:
-            return ['labels' => [], 'cpm' => [], 'acpm' => []];
-    }
-
-    $sql = "SELECT {$labelExpr} AS label,
-                   ROUND(AVG(CAST(cpm AS REAL)), 3) AS avg_cpm,
-                   ROUND(AVG(CAST(acpm AS REAL)), 3) AS avg_acpm
-            FROM readings
-            WHERE timestamp >= :since
-            GROUP BY {$groupExpr}
-            ORDER BY {$groupExpr} ASC";
-
-    $stmt = $db->prepare($sql);
-    $stmt->execute([':since' => $since]);
-    $rows = $stmt->fetchAll();
-
-    $labels = [];
-    $cpm = [];
-    $acpm = [];
-    foreach ($rows as $row) {
-        $labels[] = $row['label'];
-        $cpm[] = (float)$row['avg_cpm'];
-        $acpm[] = (float)$row['avg_acpm'];
-    }
-
-    return ['labels' => $labels, 'cpm' => $cpm, 'acpm' => $acpm];
+    return dbFetchChartData($range);
 }
 
 function fetchReadings(?int $limit = MAX_VIEW_ROWS): array {
-    $db = getDb();
-
-    $sql = 'SELECT timestamp, device_id, cpm, acpm, usv, dose, raw_data FROM readings ORDER BY id DESC';
-
-    if ($limit !== null) {
-        $sql .= ' LIMIT ' . max(1, $limit);
-    }
-
-    $stmt = $db->prepare($sql);
-    $stmt->execute();
-
-    return $stmt->fetchAll();
+    return dbFetchRecentReadings($limit);
 }
 
 function exportReadings(string $format): void {
@@ -314,20 +190,15 @@ function handleLogRequest(): void {
     // Capture all parameters for raw logging
     $rawData = json_encode($_GET, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}';
 
-    $db = getDb();
-    $stmt = $db->prepare(
-        'INSERT INTO readings (timestamp, device_id, cpm, acpm, usv, dose, raw_data, client_ip)
-         VALUES (:timestamp, :device_id, :cpm, :acpm, :usv, :dose, :raw_data, :client_ip)'
-    );
-    $stmt->execute([
-        ':timestamp' => $timestamp,
-        ':device_id' => $deviceId,
-        ':cpm' => $cpm,
-        ':acpm' => $acpm,
-        ':usv' => $usv,
-        ':dose' => $dose,
-        ':raw_data' => $rawData,
-        ':client_ip' => $clientIp,
+    dbInsertReading([
+        'timestamp' => $timestamp,
+        'device_id' => $deviceId,
+        'cpm' => $cpm,
+        'acpm' => $acpm,
+        'usv' => $usv,
+        'dose' => $dose,
+        'raw_data' => $rawData,
+        'client_ip' => $clientIp,
     ]);
 
     // Return success response as expected by GMC devices
