@@ -260,7 +260,6 @@ function showViewer(string $theme): void {
                         <thead>
                             <tr>
                                 <th>Timestamp (UTC)</th>
-                                <th>Device</th>
                                 <th>CPM</th>
                                 <th>ACPM</th>
                                 <th>µSv/h</th>
@@ -271,7 +270,6 @@ function showViewer(string $theme): void {
                             <?php foreach ($rows as $row): ?>
                             <tr>
                                 <td><?= e((string)$row['timestamp']) ?></td>
-                                <td><?= e((string)$row['device_id']) ?></td>
                                 <td><?= e((string)$row['cpm']) ?></td>
                                 <td><?= e((string)$row['acpm']) ?></td>
                                 <td><?= e((string)$row['usv']) ?></td>
@@ -280,7 +278,7 @@ function showViewer(string $theme): void {
                             <?php endforeach; ?>
                             <?php if (count($rows) === 0): ?>
                             <tr>
-                                <td colspan="6" class="empty">No data available</td>
+                                <td colspan="5" class="empty">No data available</td>
                             </tr>
                             <?php endif; ?>
                         </tbody>
