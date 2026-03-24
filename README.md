@@ -1,7 +1,9 @@
 # gmc_logger
 
 `gmc_log.php` is a single-file GMC Geiger Counter logger and viewer.
-It accepts incoming device readings via HTTP GET, stores them in SQLite, and provides a browser UI with filtering and export.
+It accepts incoming device readings via HTTP GET, stores them in SQLite, and provides a browser UI with charts and export.
+
+Licensed under **AGPL-3.0-only**.
 
 ## Configure GMC Devices
 
@@ -22,8 +24,8 @@ It accepts incoming device readings via HTTP GET, stores them in SQLite, and pro
 - Logs incoming device readings to `readings.sqlite`
 - Stores timestamps in **UTC** (`Y-m-d H:i:s`)
 - Captures device ID, CPM, ACPM, µSv/h, dose, raw query payload, and client IP
-- Shows a web dashboard for recent readings (latest first)
-- Supports date-range filtering
+- Shows a web dashboard with a readings table (latest first)
+- Displays interactive charts with day/week/month/year tabs
 - Supports export to CSV and XLSX
 
 ## Database details
@@ -34,7 +36,7 @@ SQLite DB file:
 
 Table created automatically:
 
-- `readings(id, timestamp, device_id, cpm, acpm, usv, dose, raw_data, client_ip)`
+- `readings(id, timestamp, device_id, cpm, acpm, usv, dose)`
 
 The script auto-creates the DB folder and table if missing.
 
@@ -92,15 +94,15 @@ Opening `gmc_log.php` without log params shows the dashboard.
 
 Features:
 
-- Last 100 rows shown (`MAX_VIEW_ROWS = 100`)
-- Date filters via:
-	- `f_timestamp_from=YYYY-MM-DD`
-	- `f_timestamp_to=YYYY-MM-DD`
-- Theme selection via `theme`:
+- Last 50 rows shown (`MAX_VIEW_ROWS = 50`)
+- Interactive chart with tabs for **Last Day**, **Last Week**, **Last Month**, **Last Year**
+  - Displays averaged CPM and ACPM over grouped time intervals
+- Theme selection via `theme` (default: `dark`):
 	- `light`, `dark`, `forest`, `ocean`, `sunset`, `lavender`, `mono`
+- Theme preference is saved in `localStorage`
 - Auto-refresh every 60 seconds
 
-The viewer uses `gmc_log.css` for styling.
+The viewer uses `gmc_log.css` for styling and [Chart.js](https://www.chartjs.org/) for charts.
 
 ## Export behavior
 
@@ -108,13 +110,12 @@ Use query parameter:
 
 - `export=csv` or `export=xlsx`
 
-Exports respect active date filters.
+Exports include **all** stored readings (no row limit).
 
 Examples:
 
 - CSV: `gmc_log.php?export=csv`
 - XLSX: `gmc_log.php?export=xlsx`
-- Filtered CSV: `gmc_log.php?f_timestamp_from=2026-02-01&f_timestamp_to=2026-02-20&export=csv`
 
 ## Quick usage examples
 
@@ -127,18 +128,3 @@ Then open:
 `gmc_log.php`
 
 to view data.
-
-## Requirements
-
-- PHP with PDO SQLite enabled
-- Web server that can run PHP (Apache/Nginx+PHP-FPM/IIS+PHP)
-- Write permission for `gmc_logs/`
-
-## FTP deploy script
-
-Use `ftp_update.bat` to upload selected files.
-
-- Configure FTP credentials in `ftp_update.bat` (`FTP_HOST`, `FTP_USER`, `FTP_PASS`, `FTP_REMOTE_DIR`).
-- Configure uploaded files in `FTP_FILES` (space-separated list).
-- The batch script calls `ftp_update.py --files ...`.
-- If a listed file does not exist, upload stops with error.
