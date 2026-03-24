@@ -19,7 +19,7 @@ It accepts incoming device readings via HTTP GET, stores them in SQLite, and pro
 
 ## What `gmc_log.php` does
 
-- Logs incoming device readings to `gmc_logs/gmc_readings.sqlite`
+- Logs incoming device readings to `readings.sqlite`
 - Stores timestamps in **UTC** (`Y-m-d H:i:s`)
 - Captures device ID, CPM, ACPM, µSv/h, dose, raw query payload, and client IP
 - Shows a web dashboard for recent readings (latest first)
@@ -30,7 +30,7 @@ It accepts incoming device readings via HTTP GET, stores them in SQLite, and pro
 
 SQLite DB file:
 
-- `gmc_logs/gmc_readings.sqlite`
+- `readings.sqlite`
 
 Table created automatically:
 

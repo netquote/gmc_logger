@@ -239,71 +239,12 @@ body {
     transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.filters {
-    margin-bottom: 14px;
-    padding: 14px;
-}
-
-.filters summary {
-    cursor: pointer;
-    font-weight: 600;
-    color: var(--text);
-    list-style: none;
-}
-
-.filters summary::-webkit-details-marker {
-    display: none;
-}
-
-.filters summary::before {
-    content: "▸";
-    display: inline-block;
-    margin-right: 8px;
-    transition: transform 0.2s ease;
-}
-
-.filters[open] summary::before {
-    transform: rotate(90deg);
-}
-
-.filters form {
-    margin-top: 12px;
-}
-
-.filter-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-}
-
-.filter-grid label {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 0.9rem;
-    color: var(--muted);
-}
-
-.filter-grid input {
-    width: 100%;
-    padding: 9px 10px;
-    border: 1px solid var(--input-border);
-    border-radius: 8px;
-    font-size: 0.95rem;
-    color: var(--input-text);
-    background: var(--input-bg);
-}
-
-.filter-grid input:focus {
-    outline: 2px solid var(--focus-ring);
-    border-color: var(--btn-primary-border);
-}
-
-.actions {
+.export-bar {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin-top: 12px;
+    padding: 14px;
+    margin-bottom: 14px;
 }
 
 .btn {
@@ -387,6 +328,72 @@ tbody tr:nth-child(even) {
     flex-wrap: wrap;
 }
 
+.chart-section {
+    margin-bottom: 14px;
+}
+
+.chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 16px 18px 0;
+}
+
+.chart-header h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    color: var(--text);
+}
+
+.chart-tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.chart-tab {
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    background: var(--btn-light-bg);
+    color: var(--btn-light-text);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.chart-tab:hover {
+    border-color: var(--btn-primary-border);
+    color: var(--btn-primary-bg);
+}
+
+.chart-tab.active {
+    background: var(--btn-primary-bg);
+    border-color: var(--btn-primary-border);
+    color: var(--btn-primary-text);
+}
+
+.chart-container {
+    position: relative;
+    height: 400px;
+    padding: 14px 18px 18px;
+}
+
+.chart-container canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.chart-empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 40px 18px;
+    font-size: 0.95rem;
+}
+
 @media (max-width: 640px) {
     .page {
         padding: 14px;
@@ -401,11 +408,28 @@ tbody tr:nth-child(even) {
         justify-content: flex-start;
     }
 
-    .filter-grid {
-        grid-template-columns: 1fr;
+    .export-bar {
+        flex-direction: column;
     }
 
-    .actions {
+    .chart-header {
         flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .chart-container {
+        height: 440px;
+        padding: 10px 12px 14px;
+    }
+
+    .chart-tabs {
+        width: 100%;
+    }
+
+    .chart-tab {
+        flex: 1;
+        text-align: center;
+        padding: 6px 8px;
+        font-size: 0.8rem;
     }
 }

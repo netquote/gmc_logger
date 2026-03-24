@@ -17,7 +17,7 @@ declare(strict_types=1);
 // --- Configuration ---
 define('DB_FILE', 'gmc_logs/gmc_readings.sqlite');
 define('WHITELIST_FILE', __DIR__ . '/whitelist.txt');
-define('MAX_VIEW_ROWS', 100);
+define('MAX_VIEW_ROWS', 50);
 define('THEMES', [
     'light' => 'White',
     'dark' => 'Dark',
@@ -88,8 +88,8 @@ function e(string $value): string {
 }
 
 function getThemeFromRequest(): string {
-    $theme = strtolower(trim((string)($_GET['theme'] ?? 'light')));
-    return array_key_exists($theme, THEMES) ? $theme : 'light';
+    $theme = strtolower(trim((string)($_GET['theme'] ?? 'dark')));
+    return array_key_exists($theme, THEMES) ? $theme : 'dark';
 }
 
 function getThemeOptions(): array {
@@ -172,76 +172,84 @@ function isDeviceAllowed(string $deviceId): bool {
     return isset($allowed[strtoupper(trim($deviceId))]);
 }
 
-function getFiltersFromRequest(): array {
-    return [
-        'timestamp_from' => trim((string)($_GET['f_timestamp_from'] ?? '')),
-        'timestamp_to' => trim((string)($_GET['f_timestamp_to'] ?? '')),
-    ];
-}
 
-function normalizeDateInput(string $value): string {
-    $value = trim($value);
-    if ($value === '') {
-        return '';
-    }
 
-    $dt = DateTime::createFromFormat('Y-m-d', $value);
-    if ($dt === false) {
-        return '';
-    }
-
-    return $dt->format('Y-m-d');
-}
-
-function buildWhereClause(array $filters, array &$params): string {
-    $conditions = [];
-
-    $from = normalizeDateInput((string)($filters['timestamp_from'] ?? ''));
-    if ($from !== '') {
-        $conditions[] = 'timestamp >= :f_timestamp_from';
-        $params[':f_timestamp_from'] = $from . ' 00:00:00';
-    }
-
-    $to = normalizeDateInput((string)($filters['timestamp_to'] ?? ''));
-    if ($to !== '') {
-        $conditions[] = 'timestamp <= :f_timestamp_to';
-        $params[':f_timestamp_to'] = $to . ' 23:59:59';
-    }
-
-    if (empty($conditions)) {
-        return '';
-    }
-
-    return ' WHERE ' . implode(' AND ', $conditions);
-}
-
-function fetchReadings(array $filters, ?int $limit = MAX_VIEW_ROWS): array {
+function fetchChartData(string $range): array {
     $db = getDb();
-    $params = [];
 
-    $sql = 'SELECT timestamp, device_id, cpm, acpm, usv, dose, raw_data FROM readings';
-    $sql .= buildWhereClause($filters, $params);
-    $sql .= ' ORDER BY id DESC';
+    switch ($range) {
+        case 'day':
+            $since = gmdate('Y-m-d H:i:s', time() - 86400);
+            $groupExpr = "strftime('%Y-%m-%d %H:', timestamp) || (CAST(strftime('%M', timestamp) AS INTEGER) / 10 * 10)";
+            $labelExpr = "strftime('%H:', timestamp) || SUBSTR('0' || (CAST(strftime('%M', timestamp) AS INTEGER) / 10 * 10), -2)";
+            break;
+        case 'week':
+            $since = gmdate('Y-m-d H:i:s', time() - 7 * 86400);
+            $groupExpr = "strftime('%Y-%m-%d', timestamp) || ' ' || CASE WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 6 THEN '00' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 12 THEN '06' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 18 THEN '12' ELSE '18' END";
+            $labelExpr = "strftime('%m-%d', timestamp) || ' ' || CASE WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 6 THEN '00h' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 12 THEN '06h' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 18 THEN '12h' ELSE '18h' END";
+            break;
+        case 'month':
+            $since = gmdate('Y-m-d H:i:s', time() - 30 * 86400);
+            $groupExpr = "strftime('%Y-%m-%d', timestamp) || ' ' || CASE WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 6 THEN '00' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 12 THEN '06' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 18 THEN '12' ELSE '18' END";
+            $labelExpr = "strftime('%m-%d', timestamp) || ' ' || CASE WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 6 THEN '00h' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 12 THEN '06h' WHEN CAST(strftime('%H', timestamp) AS INTEGER) < 18 THEN '12h' ELSE '18h' END";
+            break;
+        case 'year':
+            $since = gmdate('Y-m-d H:i:s', time() - 365 * 86400);
+            $groupExpr = "strftime('%Y-W', timestamp) || SUBSTR('0' || ((CAST(strftime('%j', timestamp) AS INTEGER) - 1) / 7 + 1), -2)";
+            $labelExpr = "strftime('%m-', timestamp) || 'W' || SUBSTR('0' || ((CAST(strftime('%j', timestamp) AS INTEGER) - 1) / 7 + 1), -2)";
+            break;
+        default:
+            return ['labels' => [], 'cpm' => [], 'acpm' => []];
+    }
+
+    $sql = "SELECT {$labelExpr} AS label,
+                   ROUND(AVG(CAST(cpm AS REAL)), 3) AS avg_cpm,
+                   ROUND(AVG(CAST(acpm AS REAL)), 3) AS avg_acpm
+            FROM readings
+            WHERE timestamp >= :since
+            GROUP BY {$groupExpr}
+            ORDER BY {$groupExpr} ASC";
+
+    $stmt = $db->prepare($sql);
+    $stmt->execute([':since' => $since]);
+    $rows = $stmt->fetchAll();
+
+    $labels = [];
+    $cpm = [];
+    $acpm = [];
+    foreach ($rows as $row) {
+        $labels[] = $row['label'];
+        $cpm[] = (float)$row['avg_cpm'];
+        $acpm[] = (float)$row['avg_acpm'];
+    }
+
+    return ['labels' => $labels, 'cpm' => $cpm, 'acpm' => $acpm];
+}
+
+function fetchReadings(?int $limit = MAX_VIEW_ROWS): array {
+    $db = getDb();
+
+    $sql = 'SELECT timestamp, device_id, cpm, acpm, usv, dose, raw_data FROM readings ORDER BY id DESC';
 
     if ($limit !== null) {
         $sql .= ' LIMIT ' . max(1, $limit);
     }
 
     $stmt = $db->prepare($sql);
-    $stmt->execute($params);
+    $stmt->execute();
 
     return $stmt->fetchAll();
 }
 
-function exportReadings(string $format, array $filters): void {
-    $rows = fetchReadings($filters, null);
+function exportReadings(string $format): void {
+    $rows = fetchReadings(null);
     $fileStamp = gmdate('Ymd_His');
-    $headers = ['Timestamp', 'DeviceID', 'CPM', 'ACPM', 'uSv/h', 'Dose', 'RawData'];
+    $headers = ['Timestamp', 'DeviceID', 'CPM', 'ACPM', 'uSv/h', 'Dose'];
     $records = array_map('formatExportRow', $rows);
 
     if ($format === 'csv') {
         header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename="gmc_readings_' . $fileStamp . '.csv"');
+        header('Content-Disposition: attachment; filename="readings_' . $fileStamp . '.csv"');
 
         $out = fopen('php://output', 'w');
         // Add UTF-8 BOM for Excel compatibility
@@ -259,7 +267,7 @@ function exportReadings(string $format, array $filters): void {
         // Note: This outputs tab-separated values. Excel might warn about format mismatch if strictly checked,
         // but .xlsx is often requested by users.
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=utf-8');
-        header('Content-Disposition: attachment; filename="gmc_readings_' . $fileStamp . '.xlsx"');
+        header('Content-Disposition: attachment; filename="readings_' . $fileStamp . '.xlsx"');
 
         // Add UTF-8 BOM for Excel compatibility
         echo "\xEF\xBB\xBF";
@@ -283,7 +291,6 @@ function formatExportRow(array $row): array {
         (string)($row['acpm'] ?? ''),
         (string)($row['usv'] ?? ''),
         (string)($row['dose'] ?? ''),
-        (string)($row['raw_data'] ?? ''),
     ];
 }
 
@@ -327,9 +334,14 @@ function handleLogRequest(): void {
     echo 'OK';
 }
 
-function showViewer(array $filters, string $theme): void {
-    $rows = fetchReadings($filters, MAX_VIEW_ROWS);
+function showViewer(string $theme): void {
+    $rows = fetchReadings(MAX_VIEW_ROWS);
     $themeOptions = getThemeOptions();
+
+    $chartDay   = fetchChartData('day');
+    $chartWeek  = fetchChartData('week');
+    $chartMonth = fetchChartData('month');
+    $chartYear  = fetchChartData('year');
     ?>
     <!DOCTYPE html>
     <html lang="en" data-theme="<?= e($theme) ?>">
@@ -337,7 +349,7 @@ function showViewer(array $filters, string $theme): void {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>GMC-500+ Geiger Counter Data Logger</title>
-        <link rel="stylesheet" href="gmc_log.css">
+        <link rel="stylesheet" href="gmc_log.css?v=<?= (int)@filemtime(__DIR__ . '/gmc_log.css') ?>">
     </head>
     <body>
         <main class="page">
@@ -353,29 +365,23 @@ function showViewer(array $filters, string $theme): void {
                         </select>
                     </div>
                 </div>
-                <p>Filter, browse and export counter data</p>
+                <p>Browse and export counter data</p>
             </header>
 
-            <details class="filters card">
-                <summary>Select period</summary>
-                <form method="get" action="">
-                    <input type="hidden" name="theme" id="theme-hidden" value="<?= e($theme) ?>">
-                    <div class="filter-grid">
-                        <label>Period (From)
-                            <input type="date" name="f_timestamp_from" value="<?= e($filters['timestamp_from']) ?>" placeholder="2026-02-20">
-                        </label>
-                        <label>Period (To)
-                            <input type="date" name="f_timestamp_to" value="<?= e($filters['timestamp_to']) ?>" placeholder="2026-02-20">
-                        </label>
+            <section class="card chart-section">
+                <div class="chart-header">
+                    <div class="chart-tabs">
+                        <button class="chart-tab active" data-range="day">Last Day</button>
+                        <button class="chart-tab" data-range="week">Last Week</button>
+                        <button class="chart-tab" data-range="month">Last Month</button>
+                        <button class="chart-tab" data-range="year">Last Year</button>
                     </div>
-                    <div class="actions">
-                        <button type="submit" class="btn btn-primary">Filter</button>
-                        <a href="gmc_log.php?theme=<?= e($theme) ?>" class="btn btn-light">Reset</a>
-                        <button type="submit" name="export" value="csv" class="btn btn-success">Export to CSV</button>
-                        <button type="submit" name="export" value="xlsx" class="btn btn-success">Export to XLSX</button>
-                    </div>
-                </form>
-            </details>
+                </div>
+                <div class="chart-container">
+                    <canvas id="radiationChart"></canvas>
+                </div>
+                <div id="chart-empty" class="chart-empty" style="display:none;">No data available for this period</div>
+            </section>
 
             <section class="card">
                 <div class="table-wrap">
@@ -411,19 +417,31 @@ function showViewer(array $filters, string $theme): void {
                 </div>
             </section>
 
+            <div class="export-bar card">
+                <a href="gmc_log.php?export=csv&theme=<?= e($theme) ?>" class="btn btn-success">Export to CSV</a>
+                <a href="gmc_log.php?export=xlsx&theme=<?= e($theme) ?>" class="btn btn-success">Export to XLSX</a>
+            </div>
+
             <footer class="footer">
-                <span>Results shown: <strong><?= count($rows) ?></strong> (max <?= MAX_VIEW_ROWS ?>)</span>
-                <span>Database: <strong><?= e(DB_FILE) ?></strong></span>
+                <span>Results shown: <strong><?= count($rows) ?></strong></span>
             </footer>
         </main>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+        <script>
+            const chartData = {
+                day:   <?= json_encode($chartDay, JSON_UNESCAPED_UNICODE) ?>,
+                week:  <?= json_encode($chartWeek, JSON_UNESCAPED_UNICODE) ?>,
+                month: <?= json_encode($chartMonth, JSON_UNESCAPED_UNICODE) ?>,
+                year:  <?= json_encode($chartYear, JSON_UNESCAPED_UNICODE) ?>
+            };
+        </script>
         <script>
             const themeSelect = document.getElementById('theme-select');
-            const themeHidden = document.getElementById('theme-hidden');
             const htmlNode = document.documentElement;
             const allowedThemes = ['light', 'dark', 'forest', 'ocean', 'sunset', 'lavender', 'mono'];
 
             function applyTheme(theme) {
-                const safeTheme = allowedThemes.includes(theme) ? theme : 'light';
+                const safeTheme = allowedThemes.includes(theme) ? theme : 'dark';
                 htmlNode.setAttribute('data-theme', safeTheme);
                 try {
                     localStorage.setItem('gmc_theme', safeTheme);
@@ -432,9 +450,6 @@ function showViewer(array $filters, string $theme): void {
                 }
                 if (themeSelect.value !== safeTheme) {
                     themeSelect.value = safeTheme;
-                }
-                if (themeHidden) {
-                    themeHidden.value = safeTheme;
                 }
             }
 
@@ -463,6 +478,119 @@ function showViewer(array $filters, string $theme): void {
                 window.location.reload();
             }, autoRefreshMs);
         </script>
+        <script>
+            (function () {
+                const ctx = document.getElementById('radiationChart').getContext('2d');
+                const emptyMsg = document.getElementById('chart-empty');
+                let chart = null;
+
+                function getChartColors() {
+                    const style = getComputedStyle(document.documentElement);
+                    return {
+                        text: style.getPropertyValue('--text').trim() || '#1f2937',
+                        muted: style.getPropertyValue('--muted').trim() || '#6b7280',
+                        border: style.getPropertyValue('--border').trim() || '#e5e7eb',
+                        cpm: style.getPropertyValue('--btn-primary-bg').trim() || '#0f766e',
+                        acpm: style.getPropertyValue('--btn-success-bg').trim() || '#166534'
+                    };
+                }
+
+                function renderChart(range) {
+                    const data = chartData[range];
+                    if (!data || data.labels.length === 0) {
+                        ctx.canvas.style.display = 'none';
+                        emptyMsg.style.display = 'block';
+                        if (chart) { chart.destroy(); chart = null; }
+                        return;
+                    }
+                    ctx.canvas.style.display = 'block';
+                    emptyMsg.style.display = 'none';
+
+                    const colors = getChartColors();
+                    if (chart) { chart.destroy(); }
+
+                    chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: data.labels,
+                            datasets: [
+                                {
+                                    label: 'CPM',
+                                    data: data.cpm,
+                                    borderColor: colors.cpm,
+                                    backgroundColor: colors.cpm + '22',
+                                    borderWidth: 2.5,
+                                    pointRadius: data.labels.length > 60 ? 0 : 3,
+                                    pointHoverRadius: 5,
+                                    tension: 0.3,
+                                    fill: true
+                                },
+                                {
+                                    label: 'ACPM',
+                                    data: data.acpm,
+                                    borderColor: colors.acpm,
+                                    backgroundColor: colors.acpm + '22',
+                                    borderWidth: 2.5,
+                                    pointRadius: data.labels.length > 60 ? 0 : 3,
+                                    pointHoverRadius: 5,
+                                    tension: 0.3,
+                                    fill: true
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: {
+                                legend: {
+                                    labels: { color: colors.text, usePointStyle: true, padding: 16 }
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0,0,0,0.8)',
+                                    titleColor: '#fff',
+                                    bodyColor: '#fff',
+                                    cornerRadius: 8,
+                                    padding: 10
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    ticks: { color: colors.muted, maxRotation: 45 },
+                                    grid: { color: colors.border + '66' }
+                                },
+                                y: {
+                                    beginAtZero: false,
+                                    ticks: { color: colors.muted },
+                                    grid: { color: colors.border + '66' },
+                                    title: {
+                                        display: true,
+                                        text: 'Counts Per Minute',
+                                        color: colors.muted
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                document.querySelectorAll('.chart-tab').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        document.querySelectorAll('.chart-tab').forEach(function (b) { b.classList.remove('active'); });
+                        btn.classList.add('active');
+                        renderChart(btn.dataset.range);
+                    });
+                });
+
+                renderChart('day');
+
+                const observer = new MutationObserver(function () {
+                    const activeTab = document.querySelector('.chart-tab.active');
+                    if (activeTab) { renderChart(activeTab.dataset.range); }
+                });
+                observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+            })();
+        </script>
     </body>
     </html>
     <?php
@@ -470,16 +598,15 @@ function showViewer(array $filters, string $theme): void {
 
 // --- Routing ---
 try {
-    $filters = getFiltersFromRequest();
     $theme = getThemeFromRequest();
     $export = strtolower(trim((string)($_GET['export'] ?? '')));
 
     if (hasLogParams()) {
         handleLogRequest();
     } elseif ($export === 'csv' || $export === 'xlsx') {
-        exportReadings($export, $filters);
+        exportReadings($export);
     } else {
-        showViewer($filters, $theme);
+        showViewer($theme);
     }
 } catch (Throwable $e) {
     error_log('GMC Logger error: ' . $e->getMessage());
