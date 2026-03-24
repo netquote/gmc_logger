@@ -306,7 +306,7 @@ function showViewer(string $theme): void {
         <script>
             const themeSelect = document.getElementById('theme-select');
             const htmlNode = document.documentElement;
-            const allowedThemes = ['light', 'dark', 'forest', 'ocean', 'sunset', 'lavender', 'mono'];
+            const allowedThemes = ['light', 'dark'];
 
             function applyTheme(theme) {
                 const safeTheme = allowedThemes.includes(theme) ? theme : 'dark';

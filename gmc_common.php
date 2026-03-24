@@ -4,18 +4,13 @@
 declare(strict_types=1);
 
 if (!defined('DB_FILE')) {
-    define('DB_FILE', 'gmc_logs/gmc_readings.sqlite');
+    define('DB_FILE', __DIR__ . '/gmc_logs/gmc_readings.sqlite');
 }
 
 if (!defined('THEMES')) {
     define('THEMES', [
         'light' => 'White',
         'dark' => 'Dark',
-        'forest' => 'Forest',
-        'ocean' => 'Ocean',
-        'sunset' => 'Sunset',
-        'lavender' => 'Lavender',
-        'mono' => 'Monochrome',
     ]);
 }
 
