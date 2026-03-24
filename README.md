@@ -1,6 +1,6 @@
 # gmc_logger
 
-`gmc_log.php` is a single-file GMC Geiger Counter logger and viewer.
+`gmc_log.php` is a PHP-based GMC Geiger Counter logger and viewer.
 It accepts incoming device readings via HTTP GET, stores them in SQLite, and provides a browser UI with charts and export.
 
 Licensed under **AGPL-3.0-only**.
@@ -21,8 +21,7 @@ Licensed under **AGPL-3.0-only**.
 
 ## What `gmc_log.php` does
 
-- Logs incoming device readings to `readings.sqlite`
-- Stores timestamps in **UTC** (`Y-m-d H:i:s`)
+- Logs incoming device data to `gmc_logs/gmc_readings.sqlite`
 - Captures device ID, CPM, ACPM, µSv/h, dose, raw query payload, and client IP
 - Shows a web dashboard with a readings table (latest first)
 - Displays interactive charts with day/week/month/year tabs
@@ -32,27 +31,27 @@ Licensed under **AGPL-3.0-only**.
 
 SQLite DB file:
 
-- `readings.sqlite`
+- `gmc_logs/gmc_readings.sqlite`
 
 Table created automatically:
 
-- `readings(id, timestamp, device_id, cpm, acpm, usv, dose)`
+- `readings(id, timestamp, device_id, cpm, acpm, usv, dose, raw_data, client_ip)`
 
 The script auto-creates the DB folder and table if missing.
 
 ## Logging endpoint behavior
 
-The script treats a request as a **log write** when any of these query params exists (case-insensitive):
+The script treats a request as a **log write** when any of these query params exists:
 
-- `CPM`, `ID`, `AID`, or `GID`
+- `CPM`, `AID`, or `GID`
 
-Accepted input aliases:
+Accepted input parameters (case-sensitive):
 
-- Device ID: `ID`, `id`, `AID`, `aid`, `GID`, `gid`
-- CPM: `CPM`, `cpm`
-- ACPM: `ACPM`, `acpm`
-- uSv/h: `USV`, `uSV`, `uSv`, `usv`
-- Dose: `dose`, `DOSE`
+- Device ID: `AID`
+- CPM: `CPM`
+- ACPM: `ACPM`
+- µSv/h: `uSV`
+- Dose: `dose`
 
 Defaults when omitted:
 
@@ -110,7 +109,7 @@ Use query parameter:
 
 - `export=csv` or `export=xlsx`
 
-Exports include **all** stored readings (no row limit).
+Exports include **all** stored readings (no row limit). Exported columns are: Timestamp, CPM, ACPM, µSv/h, and Dose.
 
 Examples:
 

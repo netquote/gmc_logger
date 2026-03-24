@@ -89,19 +89,6 @@ if (!function_exists('getDb')) {
                     client_ip TEXT NOT NULL DEFAULT ""
                 )'
             );
-
-            $columns = $pdo->query('PRAGMA table_info(readings)')->fetchAll();
-            $hasClientIp = false;
-            foreach ($columns as $column) {
-                if (($column['name'] ?? '') === 'client_ip') {
-                    $hasClientIp = true;
-                    break;
-                }
-            }
-
-            if (!$hasClientIp) {
-                $pdo->exec('ALTER TABLE readings ADD COLUMN client_ip TEXT NOT NULL DEFAULT ""');
-            }
         }
 
         return $pdo;
@@ -196,6 +183,31 @@ if (!function_exists('dbFetchChartData')) {
         }
 
         return ['labels' => $labels, 'cpm' => $cpm, 'acpm' => $acpm];
+    }
+}
+
+if (!function_exists('dbFetchAllReadings')) {
+    function dbFetchAllReadings(?array $range = null): array {
+        $db = getDb();
+        $whereSql = '';
+        $params = [];
+
+        if ($range !== null) {
+            $whereSql = ' WHERE timestamp >= :from AND timestamp <= :to';
+            $params = [
+                ':from' => (string)($range['from'] ?? ''),
+                ':to' => (string)($range['to'] ?? ''),
+            ];
+        }
+
+        $sql = 'SELECT * FROM readings' . $whereSql . ' ORDER BY id DESC';
+        $stmt = $db->prepare($sql);
+        foreach ($params as $name => $value) {
+            $stmt->bindValue($name, $value, PDO::PARAM_STR);
+        }
+        $stmt->execute();
+
+        return $stmt->fetchAll();
     }
 }
 

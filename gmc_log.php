@@ -22,7 +22,7 @@ define('MAX_VIEW_ROWS', 50);
 // --------------------
 
 function hasLogParams(): bool {
-    foreach (['CPM', 'cpm', 'ID', 'id', 'AID', 'aid', 'GID', 'gid'] as $key) {
+    foreach (['CPM', 'AID', 'GID'] as $key) {
         if (isset($_GET[$key])) {
             return true;
         }
@@ -120,7 +120,7 @@ function fetchReadings(?int $limit = MAX_VIEW_ROWS): array {
 function exportReadings(string $format): void {
     $rows = fetchReadings(null);
     $fileStamp = gmdate('Ymd_His');
-    $headers = ['Timestamp', 'DeviceID', 'CPM', 'ACPM', 'uSv/h', 'Dose'];
+    $headers = ['Timestamp', 'CPM', 'ACPM', 'uSv/h', 'Dose'];
     $records = array_map('formatExportRow', $rows);
 
     if ($format === 'csv') {
@@ -162,7 +162,6 @@ function exportReadings(string $format): void {
 function formatExportRow(array $row): array {
     return [
         (string)($row['timestamp'] ?? ''),
-        (string)($row['device_id'] ?? ''),
         (string)($row['cpm'] ?? ''),
         (string)($row['acpm'] ?? ''),
         (string)($row['usv'] ?? ''),
@@ -174,11 +173,11 @@ function handleLogRequest(): void {
     $timestamp = gmdate('Y-m-d H:i:s');
 
     // Get parameters from GET request (GMC devices use GET)
-    $deviceId = readParam(['ID', 'id', 'AID', 'aid', 'GID', 'gid'], 'UNKNOWN');
-    $cpm      = readParam(['CPM', 'cpm'], '0');
-    $acpm     = readParam(['ACPM', 'acpm'], '0');
-    $usv      = readParam(['USV', 'uSV', 'uSv', 'usv'], '0.0');
-    $dose     = readParam(['dose', 'DOSE'], '0');
+    $deviceId = readParam(['AID'], 'UNKNOWN');
+    $cpm      = readParam(['CPM'], '0');
+    $acpm     = readParam(['ACPM'], '0');
+    $usv      = readParam(['uSV'], '0.0');
+    $dose     = readParam(['dose'], '0');
     $clientIp = getClientIpFromRequest();
 
     if (!isDeviceAllowed($deviceId)) {
