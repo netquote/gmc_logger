@@ -97,7 +97,7 @@ Features:
 - Interactive chart with tabs for **Last Day**, **Last Week**, **Last Month**, **Last Year**
   - Displays averaged CPM and ACPM over grouped time intervals
 - Theme selection via `theme` (default: `dark`):
-	- `light`, `dark`, `forest`, `ocean`, `sunset`, `lavender`, `mono`
+	- `light`, `dark`
 - Theme preference is saved in `localStorage`
 - Auto-refresh every 60 seconds
 

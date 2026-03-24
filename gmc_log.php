@@ -139,11 +139,8 @@ function exportReadings(string $format): void {
     }
 
     if ($format === 'xlsx') {
-        // Use .xlsx extension
-        // Note: This outputs tab-separated values. Excel might warn about format mismatch if strictly checked,
-        // but .xlsx is often requested by users.
-        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; charset=utf-8');
-        header('Content-Disposition: attachment; filename="readings_' . $fileStamp . '.xlsx"');
+        header('Content-Type: text/tab-separated-values; charset=utf-8');
+        header('Content-Disposition: attachment; filename="readings_' . $fileStamp . '.tsv"');
 
         // Add UTF-8 BOM for Excel compatibility
         echo "\xEF\xBB\xBF";
@@ -156,6 +153,7 @@ function exportReadings(string $format): void {
 
             echo implode("\t", $line) . "\n";
         }
+        return;
     }
 }
 
@@ -287,7 +285,7 @@ function showViewer(string $theme): void {
 
             <div class="export-bar card">
                 <a href="gmc_log.php?export=csv&theme=<?= e($theme) ?>" class="btn btn-success">Export to CSV</a>
-                <a href="gmc_log.php?export=xlsx&theme=<?= e($theme) ?>" class="btn btn-success">Export to XLSX</a>
+                <a href="gmc_log.php?export=xlsx&theme=<?= e($theme) ?>" class="btn btn-success">Export to TSV</a>
             </div>
 
             <footer class="footer">
@@ -306,10 +304,10 @@ function showViewer(string $theme): void {
         <script>
             const themeSelect = document.getElementById('theme-select');
             const htmlNode = document.documentElement;
-            const allowedThemes = ['light', 'dark'];
+            const allowedThemes = <?= json_encode(array_keys(THEMES)) ?>;
 
             function applyTheme(theme) {
-                const safeTheme = allowedThemes.includes(theme) ? theme : 'dark';
+                const safeTheme = allowedThemes.includes(theme) ? theme : <?= json_encode(DEFAULT_THEME) ?>;
                 htmlNode.setAttribute('data-theme', safeTheme);
                 try {
                     localStorage.setItem('gmc_theme', safeTheme);
